@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from '@/components/ui/label';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Upload, Loader2, AlertTriangle, FileText, ListFilter } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Upload, Loader2, AlertTriangle, FileText, ListFilter, UserX } from 'lucide-react';
 import MenuItemFormDialog, { type MenuItemFormData } from './MenuItemFormDialog';
 import {
   AlertDialog,
@@ -31,8 +31,10 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import Image from 'next/image';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function MenuItemsManager() {
+  const { user, isLoading: authLoading } = useAuth();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,13 +47,21 @@ export default function MenuItemsManager() {
   }, []);
 
   const fetchMenuItems = useCallback(async () => {
+    if (!user || !user.email) {
+      if (!authLoading) {
+          setError("You must be logged in to manage menu items.");
+          setIsLoading(false);
+          setMenuItems([]); 
+      }
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/admin/menu/items');
+      const response = await fetch(`/api/admin/menu/items?userId=${encodeURIComponent(user.email)}`);
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch menu items');
+        throw new Error(errorData.message || 'Failed to fetch your menu items');
       }
       const data: MenuItem[] = await response.json();
       setMenuItems(data);
@@ -61,7 +71,7 @@ export default function MenuItemsManager() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user, authLoading, toast]); 
 
   useEffect(() => {
     if (hasMounted) {
@@ -70,49 +80,64 @@ export default function MenuItemsManager() {
   }, [fetchMenuItems, hasMounted]);
 
   const handleSaveMenuItem = async (data: MenuItemFormData, id?: string) => {
+    if (!user || !user.email) {
+      toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
+      throw new Error("User not authenticated");
+    }
     const url = id ? `/api/admin/menu/items/${id}` : '/api/admin/menu/items';
     const method = id ? 'PUT' : 'POST';
+
+    const payload = { ...data, userId: user.email };
 
     try {
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || `Failed to ${id ? 'update' : 'add'} item`);
       }
       toast({ title: "Success", description: `Menu item ${id ? 'updated' : 'added'} successfully.` });
-      await fetchMenuItems(); // Refresh list
+      await fetchMenuItems();
     } catch (err) {
       console.error("Save error:", err);
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
-      throw err; // Re-throw to keep dialog open or indicate failure
+      throw err;
     }
   };
 
   const handleDeleteMenuItem = async (id: string) => {
+    if (!user || !user.email) {
+      toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
+      return;
+    }
     try {
-      const response = await fetch(`/api/admin/menu/items/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/admin/menu/items/${id}?userId=${encodeURIComponent(user.email)}`, { method: 'DELETE' });
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to delete item');
       }
       toast({ title: "Success", description: "Menu item deleted successfully." });
-      await fetchMenuItems(); // Refresh list
+      await fetchMenuItems();
     } catch (err) {
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     }
   };
 
   const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user || !user.email) {
+      toast({ title: "Error", description: "You must be logged in to upload.", variant: "destructive" });
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('userId', user.email); 
 
     try {
       const response = await fetch('/api/admin/menu/upload', {
@@ -141,7 +166,7 @@ export default function MenuItemsManager() {
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     } finally {
       setIsUploading(false);
-      event.target.value = ''; // Reset file input
+      event.target.value = '';
     }
   };
 
@@ -150,6 +175,19 @@ export default function MenuItemsManager() {
       <div className="flex justify-center items-center h-64">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
+    );
+  }
+  
+  if (!user && !authLoading) {
+    return (
+        <Card className="border-destructive">
+            <CardHeader>
+                <CardTitle className="text-destructive flex items-center"><UserX className="mr-2"/> Access Denied</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p>You need to be logged in to manage menu items. Please log in and try again.</p>
+            </CardContent>
+        </Card>
     );
   }
 
@@ -162,8 +200,8 @@ export default function MenuItemsManager() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl flex items-center"><FileText className="mr-2" /> Menu Item Management</CardTitle>
-          <CardDescription>Add, edit, delete, or bulk upload menu items using an Excel file.</CardDescription>
+          <CardTitle className="text-2xl flex items-center"><FileText className="mr-2" /> Your Menu Items</CardTitle>
+          <CardDescription>Add, edit, delete, or bulk upload your menu items using an Excel file.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -171,7 +209,7 @@ export default function MenuItemsManager() {
                <ListFilter className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                <Input
                 type="search"
-                placeholder="Filter items by name or category..."
+                placeholder="Filter your items..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8 w-full sm:w-80"
@@ -191,7 +229,7 @@ export default function MenuItemsManager() {
           </div>
           <Separator />
            <div>
-            <Label htmlFor="excel-upload" className="text-base font-medium block mb-2">Upload Excel File</Label>
+            <Label htmlFor="excel-upload" className="text-base font-medium block mb-2">Upload Excel File (Replaces Your Current Menu)</Label>
             <div className="flex items-center gap-2">
                 <Input
                     id="excel-upload"
@@ -204,7 +242,7 @@ export default function MenuItemsManager() {
                 {isUploading && <Loader2 className="h-5 w-5 animate-spin" />}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-                Replaces entire menu. Columns: Name, Description, Price, Category, ImageUrl (optional), DataAiHint (optional).
+                Columns: Name, Description, Price, Category, ImageUrl (optional), DataAiHint (optional).
             </p>
           </div>
         </CardContent>
@@ -213,7 +251,7 @@ export default function MenuItemsManager() {
       {error && !isLoading && (
          <Card className="border-destructive">
           <CardHeader>
-            <CardTitle className="text-destructive flex items-center"><AlertTriangle className="mr-2"/> Error Loading Menu</CardTitle>
+            <CardTitle className="text-destructive flex items-center"><AlertTriangle className="mr-2"/> Error Loading Your Menu</CardTitle>
           </CardHeader>
           <CardContent>
             <p>{error}</p>
@@ -223,16 +261,16 @@ export default function MenuItemsManager() {
       )}
       
       {!isLoading && !error && filteredMenuItems.length === 0 && searchTerm && (
-        <p className="text-center text-muted-foreground py-4">No menu items match your search term "{searchTerm}".</p>
+        <p className="text-center text-muted-foreground py-4">No items in your menu match "{searchTerm}".</p>
       )}
       {!isLoading && !error && filteredMenuItems.length === 0 && !searchTerm && (
-        <p className="text-center text-muted-foreground py-4">No menu items found. Add some items or upload an Excel file.</p>
+        <p className="text-center text-muted-foreground py-4">Your menu is empty. Add some items or upload an Excel file.</p>
       )}
 
       {filteredMenuItems.length > 0 && (
         <Card>
             <CardHeader>
-                <CardTitle>Current Menu Items</CardTitle>
+                <CardTitle>Your Current Menu Items</CardTitle>
             </CardHeader>
             <CardContent>
                 <Table>
@@ -257,7 +295,7 @@ export default function MenuItemsManager() {
                         </TableCell>
                         <TableCell className="font-medium">{item.name}</TableCell>
                         <TableCell>{item.category}</TableCell>
-                        <TableCell className="text-right">${item.price.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">Rs.{item.price.toFixed(2)}</TableCell>
                         <TableCell className="text-center">
                         <MenuItemFormDialog
                             mode="edit"
@@ -279,7 +317,7 @@ export default function MenuItemsManager() {
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete the menu item "{item.name}".
+                                This action cannot be undone. This will permanently delete the menu item "{item.name}" from your menu.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>

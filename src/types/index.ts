@@ -1,3 +1,4 @@
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -6,6 +7,7 @@ export interface MenuItem {
   category: string;
   imageUrl?: string;
   dataAiHint?: string;
+  userId?: string; // Email of the user who owns the menu item
 }
 
 export type OrderType = 'delivery' | 'dine-in' | 'take-away';
@@ -28,4 +30,14 @@ export interface Order {
   totalCost: number;
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'completed' | 'cancelled';
   createdAt: string; // ISO date string
+  userId?: string; // Email of the user who placed the order
+}
+
+export interface AuthUser {
+  email: string;
+  name?: string; // Add name to AuthUser
+}
+
+export interface StoredUser extends AuthUser {
+  passwordHash: string; // In a real app, this would be a hash
 }

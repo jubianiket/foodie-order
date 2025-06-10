@@ -11,15 +11,16 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from '@/components/ui/separator';
 import PrintBillButton from '@/components/order/PrintBillButton';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Edit3, ShoppingBag, Truck, Utensils, User, Phone, MapPin, CalendarDays, Tag, FileText } from 'lucide-react';
+import { ArrowLeft, Edit3, ShoppingBag, Truck, Utensils, User, Phone, MapPin, CalendarDays, Tag, FileText, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-
+import { useAuth } from '@/hooks/useAuth';
 
 export default function OrderDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const { user, isLoading: authIsLoading } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const id = params.id as string;
 
@@ -28,7 +29,15 @@ export default function OrderDetailsPage() {
       const foundOrder = mockOrders.find(o => o.id === id);
       setOrder(foundOrder || null);
     }
-  }, [id]);
+  }, [id, user]);
+
+  if (authIsLoading || !user) {
+    return (
+      <div className="flex flex-grow items-center justify-center min-h-screen bg-background">
+        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (!order) {
     return (
@@ -36,7 +45,7 @@ export default function OrderDetailsPage() {
         <div className="container mx-auto p-8 text-center">
           <h1 className="text-2xl font-bold">Order Not Found</h1>
           <p className="text-muted-foreground">The requested order could not be located.</p>
-          <Button asChild className="mt-4">
+          <Button asChild className="mt-4 no-print-btn">
             <Link href="/history">
               <ArrowLeft size={18} className="mr-2" />
               Back to Order History
@@ -75,12 +84,12 @@ export default function OrderDetailsPage() {
   return (
     <AppLayout>
       <div className="container mx-auto p-4 md:p-8">
-        <Button onClick={() => router.back()} variant="outline" className="mb-6">
+        <Button onClick={() => router.back()} variant="outline" className="mb-6 no-print-btn">
           <ArrowLeft size={18} className="mr-2" />
           Back
         </Button>
 
-        <Card className="shadow-xl">
+        <Card className="shadow-xl order-details-card">
           <CardHeader>
             <div className="flex justify-between items-start">
               <div>
@@ -135,7 +144,7 @@ export default function OrderDetailsPage() {
                       <p className="font-semibold">{item.name}</p>
                       <p className="text-sm text-muted-foreground">Quantity: {item.quantity}</p>
                     </div>
-                    <p className="font-semibold">${(item.price * item.quantity).toFixed(2)}</p>
+                    <p className="font-semibold">Rs.{(item.price * item.quantity).toFixed(2)}</p>
                   </div>
                 ))}
               </div>
@@ -144,15 +153,15 @@ export default function OrderDetailsPage() {
             <Separator />
             
             <div className="text-right">
-              <p className="text-2xl font-bold">Total: <span className="text-primary">${order.totalCost.toFixed(2)}</span></p>
+              <p className="text-2xl font-bold">Total: <span className="text-primary">Rs.{order.totalCost.toFixed(2)}</span></p>
             </div>
           </CardContent>
 
-          <CardFooter className="flex flex-col md:flex-row justify-end gap-3 pt-6 border-t">
+          <CardFooter className="flex flex-col md:flex-row justify-end gap-3 pt-6 border-t order-actions-footer">
             <PrintBillButton orderId={order.id} data-testid="print-bill-button" />
             {order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'delivered' && (
               <Button asChild variant="default">
-                <Link href={`/?edit=${order.id}`}>
+                <Link href={`/create-order?edit=${order.id}`}>
                   <Edit3 size={18} className="mr-2" />
                   Edit Order
                 </Link>
